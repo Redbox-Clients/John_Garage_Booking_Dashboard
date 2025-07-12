@@ -29,6 +29,8 @@ const BookingModal = ({ booking, onClose, onStatusChange, isUpdatingStatus, upda
             <span className={`px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full ${
               booking.status === 'Completed' ? 'bg-green-100 text-green-800' :
               booking.status === 'Declined' ? 'bg-red-100 text-red-800' :
+              booking.status === 'completed' ? 'bg-green-100 text-green-800' :
+              booking.status === 'declined' ? 'bg-red-100 text-red-800' :
               'bg-yellow-100 text-yellow-800'
             }`}>
               {booking.status}
