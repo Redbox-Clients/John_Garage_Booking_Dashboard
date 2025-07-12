@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import BookingTable from './BookingTable';
 import BookingModal from './BookingModal';
 import { fetchAllBookings } from '../api';
@@ -28,17 +28,12 @@ const Dashboard = ({ onSignOut }) => {
   const [selectedBooking, setSelectedBooking] = useState(null);
 
   // States for custom datepicker logic (availability fetching, calendar display)
-  const [unavailableDates, setUnavailableDates] = useState([]); 
   const [fetchingAvailability, setFetchingAvailability] = useState(true); 
   const [availabilityError, setAvailabilityError] = useState(null); 
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth()); 
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear()); 
   const [showCalendar, setShowCalendar] = useState(false); 
   const [dateSelectionError, setDateSelectionError] = useState(null); 
-
-  // Your n8n webhook URL for availability check (GET)
-  const n8nAvailabilityWebhookUrl = 'https://redboxrob.app.n8n.cloud/webhook/a807a240-f285-4d9e-969b-a3107955c178';
-  const apiKey = ""; // Assuming API key is handled by Canvas runtime if needed
 
   // Effect to fetch all bookings ONCE when the component mounts
   useEffect(() => {
@@ -104,21 +99,6 @@ const Dashboard = ({ onSignOut }) => {
       return newDate;
     });
   };
-
-  // --- Custom Datepicker Calendar Logic ---
-  // These are kept as useMemo for consistency, but their values are no longer used for disabling dates.
-  const todayDate = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return today;
-  }, []);
-
-  const oneMonthFromToday = useMemo(() => {
-    const today = new Date();
-    const oneMonthLater = new Date(today.getFullYear(), today.getMonth() + 1, today.getDate());
-    oneMonthLater.setHours(23, 59, 59, 999); 
-    return oneMonthLater;
-  }, []);
 
   const calendarDays = useMemo(() => {
     const daysInMonth = getDaysInMonth(calendarYear, calendarMonth);
