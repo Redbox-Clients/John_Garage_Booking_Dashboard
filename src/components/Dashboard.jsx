@@ -2,7 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import BookingTable from './BookingTable';
 import BookingModal from './BookingModal';
 import { fetchAllBookings } from '../api';
-import { declineBooking, completeBooking } from '../api';
+import { declineBooking, completeBooking, approveBooking } from '../api';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // Helper function to get days in a month
 const getDaysInMonth = (year, month) => {
@@ -21,6 +23,47 @@ const formatDate = (date) => {
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
+
+// Calculate the date 3 months ago from today
+const getThreeMonthsAgo = () => {
+  const today = new Date();
+  const threeMonthsAgoDate = new Date(today.getFullYear(), today.getMonth() - 3, today.getDate());
+  threeMonthsAgoDate.setHours(0, 0, 0, 0);
+  return threeMonthsAgoDate;
+};
+
+// Helper to update a booking's status in the allRawBookings array
+function updateBookingStatusInList(bookings, bookingId, newStatus) {
+  return bookings.map(b =>
+    b.id === bookingId ? { ...b, status: newStatus } : b
+  );
+}
+
+// Helper to generate PDF for the day's bookings
+function generateBookingsPDF(bookings, dateString) {
+  const doc = new jsPDF();
+  doc.setFontSize(16);
+  doc.text('Bookings for ' + dateString, 10, 15);
+  doc.setFontSize(12);
+  const headers = ['Name', 'Email', 'Phone', 'Car Details', 'Status'];
+  let startY = 25;
+  autoTable(doc, {
+    head: [headers],
+    body: bookings.map(b => [
+      b.name,
+      b.email,
+      b.phone,
+      `${b.make || ''} ${b.model || ''} (${b.reg || ''})`.trim(),
+      b.status
+    ]),
+    startY,
+    theme: 'grid',
+    headStyles: { fillColor: [220, 220, 220] },
+    styles: { fontSize: 10 },
+    margin: { left: 10, right: 10 },
+  });
+  doc.save(`bookings-${dateString}.pdf`);
+}
 
 const Dashboard = ({ onSignOut }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -75,7 +118,6 @@ const Dashboard = ({ onSignOut }) => {
         details: booking.details,
         status: booking.status,
         appointment_date: booking.appointment_date,
-        calendar_id: booking.calendar_id, // Add calendar_id to the mapped object
         // Add any other fields your BookingTable/Modal might expect
       }));
   }, [allRawBookings, currentDate]); // Re-calculate when allRawBookings or currentDate changes
@@ -156,12 +198,31 @@ const Dashboard = ({ onSignOut }) => {
     setPendingStatusChange({ booking: selectedBooking, status });
   };
 
+  // Calculate the date 3 months ago from today
+  const threeMonthsAgo = useMemo(() => {
+    const today = new Date();
+    const threeMonthsAgoDate = new Date(today.getFullYear(), today.getMonth() - 3, today.getDate());
+    threeMonthsAgoDate.setHours(0, 0, 0, 0);
+    return threeMonthsAgoDate;
+  }, []);
+
+  // Calculate the date 3 months ahead from today
+  const threeMonthsAhead = useMemo(() => {
+    const today = new Date();
+    const threeMonthsAheadDate = new Date(today.getFullYear(), today.getMonth() + 3, today.getDate());
+    threeMonthsAheadDate.setHours(23, 59, 59, 999);
+    return threeMonthsAheadDate;
+  }, []);
+
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
-      <header className="bg-white p-4 flex flex-col sm:flex-row justify-between items-center shadow-md">
-        <h1 className="text-l font-bold text-gray-800 mb-4 sm:mb-0">The Garage Dunboyne</h1>
-
-        <div className="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-4">
+      <header className="bg-white p-4 flex flex-row items-center shadow-md">
+        {/* Left: Logo/Title */}
+        <div className="flex-1 flex items-center min-w-0">
+          <h1 className="text-l font-bold text-gray-800 truncate">The Garage Dunboyne</h1>
+        </div>
+        {/* Center: Date selection/calendar */}
+        <div className="flex-1 flex justify-center min-w-0">
           <div className="flex items-center space-x-2 relative">
             <button
               onClick={handlePrevDay}
@@ -187,8 +248,7 @@ const Dashboard = ({ onSignOut }) => {
                 <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
               </svg>
             </button>
-
-            {/* Custom Datepicker Calendar */}
+            {/* Custom Datepicker Calendar (unchanged) */}
             {showCalendar && (
               <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-20 bg-white border border-gray-300 rounded-lg shadow-xl p-4 w-72 sm:w-80">
                 {fetchingAvailability ? (
@@ -222,9 +282,16 @@ const Dashboard = ({ onSignOut }) => {
                         const dateString = date ? formatDate(date) : null;
                         const isSelected = dateString && formatDate(currentDate) === dateString;
 
+                        // Disable if more than 3 months ago or more than 3 months ahead
+                        const isTooOld = date && date < threeMonthsAgo;
+                        const isTooFar = date && date > threeMonthsAhead;
+                        const isWeekend = date && (date.getDay() === 0 || date.getDay() === 6); // Sunday=0, Saturday=6
+
                         let dayClasses = "p-2 rounded-md transition duration-150 ease-in-out";
                         if (date) {
-                          if (isSelected) {
+                          if (isTooOld || isTooFar || isWeekend) {
+                            dayClasses += " bg-gray-100 text-gray-400 cursor-not-allowed";
+                          } else if (isSelected) {
                             dayClasses += " bg-indigo-600 text-white font-bold";
                           } else {
                             dayClasses += " hover:bg-indigo-100 cursor-pointer";
@@ -237,7 +304,7 @@ const Dashboard = ({ onSignOut }) => {
                           <div
                             key={index}
                             className={dayClasses}
-                            onClick={() => handleCalendarDayClick(date)} 
+                            onClick={() => !(isTooOld || isTooFar || isWeekend) && handleCalendarDayClick(date)} 
                           >
                             {date ? date.getDate() : ''}
                           </div>
@@ -256,7 +323,18 @@ const Dashboard = ({ onSignOut }) => {
             )}
           </div>
         </div>
-        <button onClick={onSignOut} className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors mt-4 sm:mt-0">Sign Out</button>
+        {/* Right: Buttons */}
+        <div className="flex-1 flex justify-end items-center space-x-2 min-w-0">
+          <button
+            onClick={() => bookings.length > 0 && generateBookingsPDF(bookings, formatDate(currentDate))}
+            className={`px-4 py-2 rounded-lg transition-colors mr-2 ${bookings.length > 0 ? 'bg-gray-300 hover:bg-gray-400 text-gray-800 cursor-pointer' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+            disabled={bookings.length === 0}
+            title={bookings.length === 0 ? 'No bookings for this day' : 'Download PDF for This Day'}
+          >
+            Download PDF
+          </button>
+          <button onClick={onSignOut} className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors">Sign Out</button>
+        </div>
       </header>
       <main className="p-4 flex-grow">
         <BookingTable bookings={bookings} handleViewBooking={handleViewBooking} />
@@ -270,40 +348,69 @@ const Dashboard = ({ onSignOut }) => {
       )}
       {pendingStatusChange && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-          <div className="bg-white p-6 rounded shadow-lg">
-            <p>
-              Are you sure you want to mark this booking as <b>{pendingStatusChange.status}</b>?
-            </p>
-            <div className="mt-4 flex justify-end space-x-2">
-              <button onClick={() => setPendingStatusChange(null)} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
-              <button
-                onClick={async () => {
-                  const { booking, status } = pendingStatusChange;
-                  try {
-                    if (status === "Declined") {
-                      await declineBooking(booking.calendar_id); // Call the decline webhook with calendar_id
-                    } else if (status === "Completed") {
-                      await completeBooking(booking.calendar_id); // Call the complete webhook with calendar_id
+          {pendingStatusChange.status === 'Approved' ? (
+            <div className="bg-white p-6 rounded shadow-lg max-w-md w-full">
+              <h2 className="text-xl font-bold mb-2 text-blue-700">Approve Booking</h2>
+              <p className="mb-4">Are you sure you want to <span className="font-semibold text-blue-600">approve</span> this booking? This will notify the customer and mark the booking as approved.</p>
+              <div className="mt-4 flex justify-end space-x-2">
+                <button onClick={() => setPendingStatusChange(null)} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
+                <button
+                  onClick={async () => {
+                    const { booking, status } = pendingStatusChange;
+                    try {
+                      await approveBooking(booking.id);
+                      // Update the booking status in the main grid immediately
+                      setAllRawBookings(prev => updateBookingStatusInList(prev, booking.id, status));
+                      setSelectedBooking({ ...booking, status });
+                      // Optionally, refetch all bookings in the background for sync
+                      fetchAllBookings().then(setAllRawBookings);
+                    } catch (e) {
+                      alert("Failed to approve booking.");
+                    } finally {
+                      setPendingStatusChange(null);
                     }
-                    
-                    // Refetch all bookings after successful status change
-                    const updatedData = await fetchAllBookings();
-                    setAllRawBookings(updatedData);
-                    
-                    // Update the selected booking with new status
-                    setSelectedBooking({ ...booking, status });
-                  } catch (e) {
-                    alert("Failed to update booking status.");
-                  } finally {
-                    setPendingStatusChange(null);
-                  }
-                }}
-                className="px-4 py-2 bg-red-500 text-white rounded"
-              >
-                Confirm
-              </button>
+                  }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded"
+                >
+                  Yes, Approve
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-white p-6 rounded shadow-lg">
+              <p>
+                Are you sure you want to mark this booking as <b>{pendingStatusChange.status}</b>?
+              </p>
+              <div className="mt-4 flex justify-end space-x-2">
+                <button onClick={() => setPendingStatusChange(null)} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
+                <button
+                  onClick={async () => {
+                    const { booking, status } = pendingStatusChange;
+                    try {
+                      if (status === "Declined") {
+                        await declineBooking(booking.id);
+                      } else if (status === "Completed") {
+                        await completeBooking(booking.id);
+                      }
+                      const updatedData = await fetchAllBookings();
+                      setAllRawBookings(updatedData);
+                      setSelectedBooking({ ...booking, status });
+                    } catch (e) {
+                      alert("Failed to update booking status.");
+                    } finally {
+                      setPendingStatusChange(null);
+                    }
+                  }}
+                  className={`px-4 py-2 text-white rounded ${
+                    pendingStatusChange.status === 'Completed' ? 'bg-green-600 hover:bg-green-700' :
+                    'bg-red-500 hover:bg-red-600'
+                  }`}
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

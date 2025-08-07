@@ -7,7 +7,7 @@ const BookingTable = ({ bookings, handleViewBooking }) => {
 
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
-      <table className="min-w-full divide-y divide-gray-200">
+      <table className="min-w-full w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
@@ -34,8 +34,10 @@ const BookingTable = ({ bookings, handleViewBooking }) => {
                   <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
                     booking.status === 'Completed' ? 'bg-green-100 text-green-800' :
                     booking.status === 'Declined' ? 'bg-red-100 text-red-800' :
+                    booking.status === 'Approved' ? 'bg-blue-100 text-blue-800' :
                     booking.status === 'completed' ? 'bg-green-100 text-green-800' :
                     booking.status === 'declined' ? 'bg-red-100 text-red-800' :
+                    booking.status === 'approved' ? 'bg-blue-100 text-blue-800' :
                     'bg-yellow-100 text-yellow-800'
                   }`}>
                     {booking.status}
@@ -54,7 +56,7 @@ const BookingTable = ({ bookings, handleViewBooking }) => {
           ) : (
             <tr>
               {/* Message displayed when no bookings are found for the selected date */}
-              <td colSpan="5" className="px-6 py-4 text-center text-sm text-gray-500">
+              <td colSpan="6" className="py-4 text-center text-sm text-gray-500 w-full">
                 No bookings for this date.
               </td>
             </tr>

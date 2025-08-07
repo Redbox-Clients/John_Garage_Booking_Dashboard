@@ -29,8 +29,10 @@ const BookingModal = ({ booking, onClose, onStatusChange, isUpdatingStatus, upda
             <span className={`px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full ${
               booking.status === 'Completed' ? 'bg-green-100 text-green-800' :
               booking.status === 'Declined' ? 'bg-red-100 text-red-800' :
+              booking.status === 'Approved' ? 'bg-blue-100 text-blue-800' :
               booking.status === 'completed' ? 'bg-green-100 text-green-800' :
               booking.status === 'declined' ? 'bg-red-100 text-red-800' :
+              booking.status === 'approved' ? 'bg-blue-100 text-blue-800' :
               'bg-yellow-100 text-yellow-800'
             }`}>
               {booking.status}
@@ -42,12 +44,14 @@ const BookingModal = ({ booking, onClose, onStatusChange, isUpdatingStatus, upda
             <select
               id="status-dropdown"
               className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-              value={booking.status} // Use booking.status
+              value={booking.status ? booking.status.charAt(0).toUpperCase() + booking.status.slice(1).toLowerCase() : 'pending'}
               onChange={(e) => handleStatusChangeRequest(e.target.value)}
+              disabled={booking.status && booking.status.toLowerCase() === 'declined' || booking.status && booking.status.toLowerCase() === 'completed'}
             >
-              <option value="pending" disabled>Pending</option>
-              <option value="Completed">Completed</option>
-              <option value="Declined">Declined</option>
+              <option value="pending" disabled={booking.status && booking.status.toLowerCase() !== 'pending'}>Pending</option>
+              <option value="Approved" disabled={booking.status && (booking.status.toLowerCase() === 'declined' || booking.status.toLowerCase() === 'completed' || booking.status.toLowerCase() === 'approved')}>Approved</option>
+              <option value="Completed" disabled={booking.status && (booking.status.toLowerCase() === 'declined' || booking.status.toLowerCase() === 'completed')}>Completed</option>
+              <option value="Declined" disabled={booking.status && (booking.status.toLowerCase() === 'declined' || booking.status.toLowerCase() === 'completed')}>Declined</option>
             </select>
           </div>
 

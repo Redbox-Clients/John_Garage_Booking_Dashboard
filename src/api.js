@@ -18,12 +18,17 @@ export const fetchAllBookings = async () => { // Removed 'date' parameter
 
 export const declineBooking = async (bookingId) => {
   const response = await axios.post("https://redboxrob.app.n8n.cloud/webhook/43e21861-e5fe-47a9-befa-4d4c8f83d960", 
-    { bookingId });
+    { id: String(bookingId) });
   return response.data;
 };
 
 export const completeBooking = async (bookingId) => {
   const response = await axios.post("https://redboxrob.app.n8n.cloud/webhook/1f005c03-6bfc-4f4d-84a3-6849d9a9d27b",
-     { bookingId });
+     { id: String(bookingId) });
+  return response.data;
+};
+
+export const approveBooking = async (bookingId) => {
+  const response = await axios.post("https://redboxrob.app.n8n.cloud/webhook/d57bb452-db53-4f5f-b03a-a1045219d9f1", { id: String(bookingId) });
   return response.data;
 };
