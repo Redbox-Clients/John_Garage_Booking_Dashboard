@@ -46,12 +46,12 @@ const BookingModal = ({ booking, onClose, onStatusChange, isUpdatingStatus, upda
               className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
               value={booking.status ? booking.status.charAt(0).toUpperCase() + booking.status.slice(1).toLowerCase() : 'pending'}
               onChange={(e) => handleStatusChangeRequest(e.target.value)}
-              disabled={booking.status && booking.status.toLowerCase() === 'declined' || booking.status && booking.status.toLowerCase() === 'completed'}
+              disabled={(booking.status && booking.status.toLowerCase() === 'declined') || (booking.status && booking.status.toLowerCase() === 'completed')}
             >
               <option value="pending" disabled={booking.status && booking.status.toLowerCase() !== 'pending'}>Pending</option>
-              <option value="Approved" disabled={booking.status && (booking.status.toLowerCase() === 'declined' || booking.status.toLowerCase() === 'completed' || booking.status.toLowerCase() === 'approved')}>Approved</option>
-              <option value="Completed" disabled={booking.status && (booking.status.toLowerCase() === 'declined' || booking.status.toLowerCase() === 'completed')}>Completed</option>
-              <option value="Declined" disabled={booking.status && (booking.status.toLowerCase() === 'declined' || booking.status.toLowerCase() === 'completed')}>Declined</option>
+              <option value="Approved" disabled={booking.status && ((booking.status.toLowerCase() === 'declined') || (booking.status.toLowerCase() === 'completed') || (booking.status.toLowerCase() === 'approved'))}>Approved</option>
+              <option value="Completed" disabled={booking.status && ((booking.status.toLowerCase() === 'declined') || (booking.status.toLowerCase() === 'completed'))}>Completed</option>
+              <option value="Declined" disabled={booking.status && ((booking.status.toLowerCase() === 'declined') || (booking.status.toLowerCase() === 'completed'))}>Declined</option>
             </select>
           </div>
 

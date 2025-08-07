@@ -24,14 +24,6 @@ const formatDate = (date) => {
   return `${year}-${month}-${day}`;
 };
 
-// Calculate the date 3 months ago from today
-const getThreeMonthsAgo = () => {
-  const today = new Date();
-  const threeMonthsAgoDate = new Date(today.getFullYear(), today.getMonth() - 3, today.getDate());
-  threeMonthsAgoDate.setHours(0, 0, 0, 0);
-  return threeMonthsAgoDate;
-};
-
 // Helper to update a booking's status in the allRawBookings array
 function updateBookingStatusInList(bookings, bookingId, newStatus) {
   return bookings.map(b =>
