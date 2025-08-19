@@ -316,7 +316,14 @@ const Dashboard = ({ onSignOut }) => {
           </div>
         </div>
         {/* Right: Buttons */}
+      
         <div className="flex-1 flex justify-end items-center space-x-2 min-w-0">
+          <button
+            onClick={() => window.open('https://thegaragedunboynebookingform.netlify.app/', '_blank')}
+            className="px-4 py-2 rounded-lg transition-colors bg-blue-400 hover:bg-blue-500 text-white"
+          >
+            Book Appointment
+        </button>
           <button
             onClick={() => bookings.length > 0 && generateBookingsPDF(bookings, formatDate(currentDate))}
             className={`px-4 py-2 rounded-lg transition-colors mr-2 ${bookings.length > 0 ? 'bg-gray-300 hover:bg-gray-400 text-gray-800 cursor-pointer' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
