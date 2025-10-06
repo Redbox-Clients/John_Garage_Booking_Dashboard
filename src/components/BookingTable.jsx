@@ -1,7 +1,7 @@
 // src/components/BookingTable.jsx
 import React from 'react';
 
-const BookingTable = ({ bookings, handleViewBooking }) => {
+const BookingTable = ({ bookings, handleViewBooking, isUpdatingStatus }) => {
   // Ensure bookings is an array to prevent errors if data is not yet loaded or is malformed
   const safeBookings = Array.isArray(bookings) ? bookings : [];
 
@@ -19,7 +19,16 @@ const BookingTable = ({ bookings, handleViewBooking }) => {
           </tr>
         </thead>
         <tbody>
-          {safeBookings.length > 0 ? (
+          {isUpdatingStatus ? (
+            <tr>
+              <td colSpan="6" className="py-8 text-center">
+                <div className="flex flex-col items-center justify-center space-y-3">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                  <p className="text-sm text-gray-600">Updating booking status...</p>
+                </div>
+              </td>
+            </tr>
+          ) : safeBookings.length > 0 ? (
             safeBookings.map((booking) => (
               <tr key={booking.id} className="hover:bg-gray-50 transition-colors duration-150">
                 {/* Displaying first 8 characters of ID for brevity */}

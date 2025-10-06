@@ -1,18 +1,22 @@
 // src/api.js
 import axios from 'axios';
 
-export const fetchAllBookings = async () => { // Removed 'date' parameter
+export const fetchAllBookings = async () => {
   try {
-    // This URL will now always fetch all bookings, as per your clarification.
-    const url = "https://redboxrob.app.n8n.cloud/webhook/d1193ebf-bc94-4ee8-a9f2-9ef90ad80284"; 
-      
-    const response = await axios.get(url);
-    // Ensure response.data is an array; if not, return empty array
+    // Supabase REST API endpoint for the 'Bookings' table (case-sensitive)
+    const url = "https://cxxsmnajkafbrltyjrfi.supabase.co/rest/v1/Bookings";
+    const response = await axios.get(url, {
+      headers: {
+        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN4eHNtbmFqa2FmYnJsdHlqcmZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE4MjIzNjQsImV4cCI6MjA2NzM5ODM2NH0.LGWqe-Dma8S-ly3WpLGzeFwCgTS1Ef60Ils2Y2JctS0',
+        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN4eHNtbmFqa2FmYnJsdHlqcmZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE4MjIzNjQsImV4cCI6MjA2NzM5ODM2NH0.LGWqe-Dma8S-ly3WpLGzeFwCgTS1Ef60Ils2Y2JctS0',
+        'Content-Type': 'application/json',
+      }
+    });
+    // Supabase returns an array of rows
     return Array.isArray(response.data) ? response.data : [];
   } catch (error) {
-    console.error("Error fetching bookings:", error);
-    // Important: Return an empty array on error to prevent breaking components expecting an array
-    return []; 
+    console.error("Error fetching bookings from Supabase:", error);
+    return [];
   }
 };
 
