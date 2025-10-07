@@ -446,7 +446,7 @@ const Dashboard = ({ onSignOut }) => {
             onClick={() => window.open('https://thegaragedunboynebookingform.netlify.app/', '_blank')}
             className="px-4 py-2 rounded-lg transition-colors bg-blue-400 hover:bg-blue-500 text-white"
           >
-            Book Appointment
+            Book
         </button>
           <button
             onClick={() => bookings.length > 0 && generateBookingsPDF(bookings, activeView === 'today' ? formatDate(currentDate) : 'Pending-Bookings')}
@@ -454,7 +454,7 @@ const Dashboard = ({ onSignOut }) => {
             disabled={bookings.length === 0}
             title={bookings.length === 0 ? `No ${activeView === 'today' ? 'bookings for this day' : 'pending bookings'}` : `Download PDF for ${activeView === 'today' ? 'This Day' : 'Pending Bookings'}`}
           >
-            Download PDF
+            Print
           </button>
           <button onClick={onSignOut} className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors">Sign Out</button>
         </div>
