@@ -14,6 +14,7 @@ const BookingTable = ({ bookings, handleViewBooking, isUpdatingStatus }) => {
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Car Details</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Booking Date</th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
           </tr>
@@ -21,7 +22,7 @@ const BookingTable = ({ bookings, handleViewBooking, isUpdatingStatus }) => {
         <tbody>
           {isUpdatingStatus ? (
             <tr>
-              <td colSpan="6" className="py-8 text-center">
+              <td colSpan="7" className="py-8 text-center">
                 <div className="flex flex-col items-center justify-center space-y-3">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
                   <p className="text-sm text-gray-600">Updating booking status...</p>
@@ -38,8 +39,12 @@ const BookingTable = ({ bookings, handleViewBooking, isUpdatingStatus }) => {
                 <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-700">{booking.phone}</td>
                 {/* Concatenating car make, model, and registration */}
                 <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-700">{`${booking.make || ''} ${booking.model || ''} (${booking.reg || ''})`.trim()}</td>
+                {/* Booking Date column */}
+                <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-700">
+                  {booking.appointment_date ? new Date(booking.appointment_date).toLocaleDateString('en-GB') : 'N/A'}
+                </td>
+                {/* Status column */}
                 <td className="px-6 py-2 whitespace-nowrap">
-                  {/* Dynamic styling for status badge */}
                   <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
                     booking.status === 'Completed' ? 'bg-green-100 text-green-800' :
                     booking.status === 'Declined' ? 'bg-red-100 text-red-800' :
@@ -52,6 +57,7 @@ const BookingTable = ({ bookings, handleViewBooking, isUpdatingStatus }) => {
                     {booking.status}
                   </span>
                 </td>
+                {/* Actions column */}
                 <td className="px-6 py-2 whitespace-nowrap text-sm font-medium">
                   <button
                     onClick={() => handleViewBooking(booking)}
@@ -65,7 +71,7 @@ const BookingTable = ({ bookings, handleViewBooking, isUpdatingStatus }) => {
           ) : (
             <tr>
               {/* Message displayed when no bookings are found for the selected date */}
-              <td colSpan="6" className="py-4 text-center text-sm text-gray-500 w-full">
+              <td colSpan="7" className="py-4 text-center text-sm text-gray-500 w-full">
                 No bookings for this date.
               </td>
             </tr>

@@ -68,7 +68,13 @@ const Dashboard = ({ onSignOut }) => {
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth()); 
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear()); 
   const [showCalendar, setShowCalendar] = useState(false); 
-  const [dateSelectionError, setDateSelectionError] = useState(null); 
+  const [dateSelectionError, setDateSelectionError] = useState(null);
+
+  // Navigation states - must be declared before the useMemo that uses them
+  const [pendingStatusChange, setPendingStatusChange] = useState(null); // { booking, status } or null
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false); // For table loading state
+  const [activeView, setActiveView] = useState('today'); // 'today' or 'pending'
+  const [sideNavOpen, setSideNavOpen] = useState(false); // For mobile menu toggle 
 
   // Effect to fetch all bookings ONCE when the component mounts
   useEffect(() => {
@@ -89,30 +95,42 @@ const Dashboard = ({ onSignOut }) => {
     fetchInitialBookings();
   }, []); // Empty dependency array means this runs only once on mount
 
-  // Use useMemo to filter bookings based on currentDate from allRawBookings
+  // Use useMemo to filter bookings based on activeView and currentDate from allRawBookings
   const bookings = useMemo(() => {
     const formattedCurrentDate = formatDate(currentDate);
     console.log("Current date:", formattedCurrentDate);
     console.log("All bookings:", allRawBookings.map(b => b.appointment_date));
-    return allRawBookings
-      .filter(booking => {
+    
+    let filteredBookings;
+    
+    if (activeView === 'today') {
+      // Filter by current date for today's bookings
+      filteredBookings = allRawBookings.filter(booking => {
         return booking.appointment_date === formattedCurrentDate;
-      })
-      .map(booking => ({
-        // Map webhook data keys to expected keys for BookingTable and BookingModal
-        id: String(booking.id), 
-        name: booking.name,
-        email: booking.email,
-        phone: booking.phone,
-        make: booking.make,
-        model: booking.model,
-        reg: booking.reg,
-        details: booking.details,
-        status: booking.status,
-        appointment_date: booking.appointment_date,
-        // Add any other fields your BookingTable/Modal might expect
-      }));
-  }, [allRawBookings, currentDate]); // Re-calculate when allRawBookings or currentDate changes
+      });
+    } else if (activeView === 'pending') {
+      // Filter by pending status for pending approval
+      filteredBookings = allRawBookings.filter(booking => {
+        return booking.status && booking.status.toLowerCase() === 'pending';
+      });
+    }
+    
+    return filteredBookings.map(booking => ({
+      // Map webhook data keys to expected keys for BookingTable and BookingModal
+      id: String(booking.id), 
+      name: booking.name,
+      email: booking.email,
+      phone: booking.phone,
+      make: booking.make,
+      model: booking.model,
+      reg: booking.reg,
+      details: booking.details,
+      status: booking.status,
+      appointment_date: booking.appointment_date,
+      date: booking.appointment_date, // Add this for BookingModal compatibility
+      // Add any other fields your BookingTable/Modal might expect
+    }));
+  }, [allRawBookings, currentDate, activeView]); // Re-calculate when allRawBookings, currentDate, or activeView changes
 
   const handleViewBooking = (booking) => setSelectedBooking(booking);
   const handleCloseModal = () => setSelectedBooking(null);
@@ -184,10 +202,66 @@ const Dashboard = ({ onSignOut }) => {
     setShowCalendar(false); 
   };
 
-  const [pendingStatusChange, setPendingStatusChange] = useState(null); // { booking, status } or null
-
   const handleStatusChangeRequest = (status) => {
     setPendingStatusChange({ booking: selectedBooking, status });
+  };
+
+  const handleConfirmStatusChange = () => {
+    const { booking, status } = pendingStatusChange;
+    
+    // Close both the confirmation modal and the booking modal
+    setPendingStatusChange(null);
+    setSelectedBooking(null);
+    
+    // Start the loading state
+    setIsUpdatingStatus(true);
+    
+    // Set up the status change after a 3-second delay
+    setTimeout(async () => {
+      try {
+        console.log("Starting API call for status:", status, "booking ID:", booking.id);
+        
+        if (status === "Approved") {
+          await approveBooking(booking.id);
+        } else if (status === "Declined") {
+          await declineBooking(booking.id);
+        } else if (status === "Completed") {
+          await completeBooking(booking.id);
+        }
+        
+        console.log("API call completed, waiting for backend processing...");
+        
+        // Wait additional time for n8n webhook to process and update Supabase
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Refresh all bookings data and update the state
+        const updatedData = await fetchAllBookings();
+        console.log("Updated data received:", updatedData);
+        
+        // Check if the status actually updated
+        const updatedBooking = updatedData.find(b => String(b.id) === String(booking.id));
+        if (updatedBooking) {
+          console.log("Booking found with status:", updatedBooking.status);
+          if (updatedBooking.status === status || updatedBooking.status.toLowerCase() === status.toLowerCase()) {
+            console.log("Status update confirmed!");
+          } else {
+            console.warn("Status might not have updated yet. Expected:", status, "Got:", updatedBooking.status);
+          }
+        } else {
+          console.warn("Updated booking not found in response");
+        }
+        
+        setAllRawBookings(updatedData);
+        console.log("State updated with new data");
+        
+      } catch (error) {
+        console.error("Failed to update booking status:", error);
+        alert("Failed to update booking status. Please try again.");
+      } finally {
+        setIsUpdatingStatus(false);
+        console.log("Loading state ended");
+      }
+    }, 3000);
   };
 
   // Calculate the date 3 months ago from today
@@ -207,13 +281,69 @@ const Dashboard = ({ onSignOut }) => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
-      <header className="bg-white p-4 flex flex-row items-center shadow-md">
+    <div className="min-h-screen bg-gray-100 flex">
+      {/* Side Navigation */}
+      <div className={`bg-white shadow-lg transition-all duration-300 ease-in-out ${sideNavOpen ? 'w-64' : 'w-18'} flex-shrink-0`}>
+        <div className="p-4">
+          {/* Menu Toggle Button */}
+          <button
+            onClick={() => setSideNavOpen(!sideNavOpen)}
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors mb-4"
+            aria-label="Toggle Menu"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          
+          {/* Navigation Menu */}
+          <nav className="space-y-2">
+            <button
+              onClick={() => {
+                setActiveView('today');
+                // Set current date to today when Today's Bookings is clicked
+                const today = new Date();
+                setCurrentDate(today);
+                // Also set calendar month/year to current month/year
+                setCalendarMonth(today.getMonth());
+                setCalendarYear(today.getFullYear());
+              }}
+              className={`w-full flex items-center p-3 rounded-lg transition-colors ${
+                activeView === 'today' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              {sideNavOpen && <span className="ml-3 font-medium">Today's Bookings</span>}
+            </button>
+            
+            <button
+              onClick={() => setActiveView('pending')}
+              className={`w-full flex items-center p-3 rounded-lg transition-colors ${
+                activeView === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {sideNavOpen && <span className="ml-3 font-medium">Pending Approval</span>}
+            </button>
+          </nav>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col">
+        <header className="bg-white p-4 flex flex-row items-center shadow-md">
         {/* Left: Logo/Title */}
         <div className="flex-1 flex items-center min-w-0">
-          <h1 className="text-l font-bold text-gray-800 truncate">The Garage Dunboyne</h1>
+          <h1 className="text-l font-bold text-gray-800 truncate">
+            The Garage Dunboyne - {activeView === 'today' ? "Today's Bookings" : "Pending Approval"}
+          </h1>
         </div>
-        {/* Center: Date selection/calendar */}
+        {/* Center: Date selection/calendar - only show for today's bookings */}
+        {activeView === 'today' && (
         <div className="flex-1 flex justify-center min-w-0">
           <div className="flex items-center space-x-2 relative">
             <button
@@ -315,6 +445,7 @@ const Dashboard = ({ onSignOut }) => {
             )}
           </div>
         </div>
+        )}
         {/* Right: Buttons */}
       
         <div className="flex-1 flex justify-end items-center space-x-2 min-w-0">
@@ -325,10 +456,10 @@ const Dashboard = ({ onSignOut }) => {
             Book Appointment
         </button>
           <button
-            onClick={() => bookings.length > 0 && generateBookingsPDF(bookings, formatDate(currentDate))}
+            onClick={() => bookings.length > 0 && generateBookingsPDF(bookings, activeView === 'today' ? formatDate(currentDate) : 'Pending-Bookings')}
             className={`px-4 py-2 rounded-lg transition-colors mr-2 ${bookings.length > 0 ? 'bg-gray-300 hover:bg-gray-400 text-gray-800 cursor-pointer' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
             disabled={bookings.length === 0}
-            title={bookings.length === 0 ? 'No bookings for this day' : 'Download PDF for This Day'}
+            title={bookings.length === 0 ? `No ${activeView === 'today' ? 'bookings for this day' : 'pending bookings'}` : `Download PDF for ${activeView === 'today' ? 'This Day' : 'Pending Bookings'}`}
           >
             Download PDF
           </button>
@@ -336,7 +467,7 @@ const Dashboard = ({ onSignOut }) => {
         </div>
       </header>
       <main className="p-4 flex-grow">
-        <BookingTable bookings={bookings} handleViewBooking={handleViewBooking} />
+        <BookingTable bookings={bookings} handleViewBooking={handleViewBooking} isUpdatingStatus={isUpdatingStatus} />
       </main>
       {selectedBooking && (
         <BookingModal
@@ -345,6 +476,7 @@ const Dashboard = ({ onSignOut }) => {
           handleStatusChangeRequest={handleStatusChangeRequest}
         />
       )}
+      
       {pendingStatusChange && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
           {pendingStatusChange.status === 'Approved' ? (
@@ -354,21 +486,7 @@ const Dashboard = ({ onSignOut }) => {
               <div className="mt-4 flex justify-end space-x-2">
                 <button onClick={() => setPendingStatusChange(null)} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
                 <button
-                  onClick={async () => {
-                    const { booking, status } = pendingStatusChange;
-                    try {
-                      await approveBooking(booking.id);
-                      // Update the booking status in the main grid immediately
-                      setAllRawBookings(prev => updateBookingStatusInList(prev, booking.id, status));
-                      setSelectedBooking({ ...booking, status });
-                      // Optionally, refetch all bookings in the background for sync
-                      fetchAllBookings().then(setAllRawBookings);
-                    } catch (e) {
-                      alert("Failed to approve booking.");
-                    } finally {
-                      setPendingStatusChange(null);
-                    }
-                  }}
+                  onClick={handleConfirmStatusChange}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded"
                 >
                   Yes, Approve
@@ -383,23 +501,7 @@ const Dashboard = ({ onSignOut }) => {
               <div className="mt-4 flex justify-end space-x-2">
                 <button onClick={() => setPendingStatusChange(null)} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
                 <button
-                  onClick={async () => {
-                    const { booking, status } = pendingStatusChange;
-                    try {
-                      if (status === "Declined") {
-                        await declineBooking(booking.id);
-                      } else if (status === "Completed") {
-                        await completeBooking(booking.id);
-                      }
-                      const updatedData = await fetchAllBookings();
-                      setAllRawBookings(updatedData);
-                      setSelectedBooking({ ...booking, status });
-                    } catch (e) {
-                      alert("Failed to update booking status.");
-                    } finally {
-                      setPendingStatusChange(null);
-                    }
-                  }}
+                  onClick={handleConfirmStatusChange}
                   className={`px-4 py-2 text-white rounded ${
                     pendingStatusChange.status === 'Completed' ? 'bg-green-600 hover:bg-green-700' :
                     'bg-red-500 hover:bg-red-600'
@@ -412,6 +514,7 @@ const Dashboard = ({ onSignOut }) => {
           )}
         </div>
       )}
+      </div>
     </div>
   );
 };
