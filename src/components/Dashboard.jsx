@@ -24,13 +24,6 @@ const formatDate = (date) => {
   return `${year}-${month}-${day}`;
 };
 
-// Helper to update a booking's status in the allRawBookings array
-function updateBookingStatusInList(bookings, bookingId, newStatus) {
-  return bookings.map(b =>
-    b.id === bookingId ? { ...b, status: newStatus } : b
-  );
-}
-
 // Helper to generate PDF for the day's bookings
 function generateBookingsPDF(bookings, dateString) {
   const doc = new jsPDF();
