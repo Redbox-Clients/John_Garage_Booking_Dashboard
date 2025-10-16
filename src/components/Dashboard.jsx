@@ -4,7 +4,7 @@ import { auth } from '../firebase';
 import BookingTable from './BookingTable';
 import BookingModal from './BookingModal';
 import { fetchAllBookings } from '../api';
-import { declineBooking, completeBooking, approveBooking, cleanupDuplicates } from '../api';
+import { declineBooking, completeBooking, approveBooking } from '../api';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
