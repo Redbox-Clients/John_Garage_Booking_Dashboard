@@ -2,7 +2,7 @@
 import axios from 'axios';
 import { auth } from './firebase';
 
-const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:8080';
+const API_BASE = process.env.REACT_APP_API_BASE || 'https://garage-booking-ygrt.onrender.com';
 
 async function getAuthHeader() {
   const currentUser = auth.currentUser;
