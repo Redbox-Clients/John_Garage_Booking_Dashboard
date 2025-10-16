@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '../firebase';
 import BookingTable from './BookingTable';
 import BookingModal from './BookingModal';
 import { fetchAllBookings } from '../api';
-import { declineBooking, completeBooking, approveBooking } from '../api';
+import { declineBooking, completeBooking, approveBooking, cleanupDuplicates } from '../api';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -68,13 +70,26 @@ const Dashboard = ({ onSignOut }) => {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false); // For table loading state
   const [activeView, setActiveView] = useState('today'); // 'today' or 'pending'
   const [sideNavOpen, setSideNavOpen] = useState(false); // For mobile menu toggle 
+  const [authReady, setAuthReady] = useState(false); // Track if Firebase auth is ready
 
-  // Effect to fetch all bookings ONCE when the component mounts
+  // Effect to wait for Firebase auth to be ready
   useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      console.log('Auth state changed:', user?.email || 'No user');
+      setAuthReady(true); // Auth state is now determined
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Effect to fetch all bookings ONCE when auth is ready
+  useEffect(() => {
+    if (!authReady) return; // Don't fetch until auth is ready
+
     const fetchInitialBookings = async () => {
       try {
         setFetchingAvailability(true); // Can reuse this loading state for initial fetch
         setAvailabilityError(null);
+        console.log('Fetching bookings with auth ready...');
         const data = await fetchAllBookings(); // Call API without date parameter
         setAllRawBookings(data); // Store all raw bookings
       } catch (error) {
@@ -86,7 +101,7 @@ const Dashboard = ({ onSignOut }) => {
     };
 
     fetchInitialBookings();
-  }, []); // Empty dependency array means this runs only once on mount
+  }, [authReady]); // Run when authReady changes
 
   // Use useMemo to filter bookings based on activeView and currentDate from allRawBookings
   const bookings = useMemo(() => {
@@ -443,7 +458,7 @@ const Dashboard = ({ onSignOut }) => {
       
         <div className="flex-1 flex justify-end items-center space-x-2 min-w-0">
           <button
-            onClick={() => window.open('https://thegaragedunboynebookingform.netlify.app/', '_blank')}
+            onClick={() => window.open('/booking', '_blank')}
             className="px-4 py-2 rounded-lg transition-colors bg-blue-400 hover:bg-blue-500 text-white"
           >
             Book

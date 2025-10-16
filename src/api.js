@@ -1,38 +1,97 @@
 // src/api.js
 import axios from 'axios';
+import { auth } from './firebase';
 
+const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:8080';
+
+async function getAuthHeader() {
+  const currentUser = auth.currentUser;
+  console.log('Current user:', currentUser?.email || 'No user');
+  
+  if (!currentUser) {
+    console.warn('No authenticated user found');
+    return {};
+  }
+  
+  try {
+    const idToken = await currentUser.getIdToken();
+    console.log('Got ID token:', idToken ? 'yes' : 'no');
+    return { Authorization: `Bearer ${idToken}` };
+  } catch (error) {
+    console.error('Failed to get ID token:', error);
+    return {};
+  }
+}
+
+// Public API functions (no auth required)
+export const fetchAvailability = async () => {
+  try {
+    const { data } = await axios.get(`${API_BASE}/api/availability`);
+    return data.unavailableDates || [];
+  } catch (error) {
+    console.error('Error fetching availability:', error);
+    return [];
+  }
+};
+
+export const createBooking = async (bookingData) => {
+  try {
+    const { data } = await axios.post(`${API_BASE}/api/bookings`, bookingData);
+    return data;
+  } catch (error) {
+    console.error('Error creating booking:', error);
+    throw error;
+  }
+};
+
+export const cancelBooking = async (bookingId) => {
+  try {
+    const { data } = await axios.post(`${API_BASE}/api/bookings/cancel`, { bookingId });
+    return data;
+  } catch (error) {
+    console.error('Error cancelling booking:', error);
+    throw error;
+  }
+};
+
+// Protected API functions (auth required)
 export const fetchAllBookings = async () => {
   try {
-    // Supabase REST API endpoint for the 'Bookings' table (case-sensitive)
-    const url = "https://cxxsmnajkafbrltyjrfi.supabase.co/rest/v1/Bookings";
-    const response = await axios.get(url, {
-      headers: {
-        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN4eHNtbmFqa2FmYnJsdHlqcmZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE4MjIzNjQsImV4cCI6MjA2NzM5ODM2NH0.LGWqe-Dma8S-ly3WpLGzeFwCgTS1Ef60Ils2Y2JctS0',
-        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN4eHNtbmFqa2FmYnJsdHlqcmZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE4MjIzNjQsImV4cCI6MjA2NzM5ODM2NH0.LGWqe-Dma8S-ly3WpLGzeFwCgTS1Ef60Ils2Y2JctS0',
-        'Content-Type': 'application/json',
-      }
-    });
-    // Supabase returns an array of rows
-    return Array.isArray(response.data) ? response.data : [];
+    const headers = await getAuthHeader();
+    const { data } = await axios.get(`${API_BASE}/api/bookings`, { headers });
+    return Array.isArray(data) ? data : [];
   } catch (error) {
-    console.error("Error fetching bookings from Supabase:", error);
+    console.error('Error fetching bookings:', error);
     return [];
   }
 };
 
 export const declineBooking = async (bookingId) => {
-  const response = await axios.post("https://redboxrob.app.n8n.cloud/webhook/43e21861-e5fe-47a9-befa-4d4c8f83d960", 
-    { id: String(bookingId) });
-  return response.data;
+  const headers = await getAuthHeader();
+  const { data } = await axios.post(`${API_BASE}/api/bookings/${bookingId}/decline`, {}, { headers });
+  return data;
 };
 
 export const completeBooking = async (bookingId) => {
-  const response = await axios.post("https://redboxrob.app.n8n.cloud/webhook/1f005c03-6bfc-4f4d-84a3-6849d9a9d27b",
-     { id: String(bookingId) });
-  return response.data;
+  const headers = await getAuthHeader();
+  const { data } = await axios.post(`${API_BASE}/api/bookings/${bookingId}/complete`, {}, { headers });
+  return data;
 };
 
 export const approveBooking = async (bookingId) => {
-  const response = await axios.post("https://redboxrob.app.n8n.cloud/webhook/d57bb452-db53-4f5f-b03a-a1045219d9f1", { id: String(bookingId) });
-  return response.data;
+  const headers = await getAuthHeader();
+  const { data } = await axios.post(`${API_BASE}/api/bookings/${bookingId}/approve`, {}, { headers });
+  return data;
+};
+
+// Admin function to cleanup duplicate bookings
+export const cleanupDuplicates = async () => {
+  try {
+    const headers = await getAuthHeader();
+    const { data } = await axios.post(`${API_BASE}/api/admin/cleanup-duplicates`, {}, { headers });
+    return data;
+  } catch (error) {
+    console.error('Error cleaning up duplicates:', error);
+    throw error;
+  }
 };
