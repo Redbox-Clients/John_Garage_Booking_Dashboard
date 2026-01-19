@@ -347,7 +347,7 @@ const Dashboard = ({ onSignOut }) => {
         {/* Left: Logo/Title */}
         <div className="flex-1 flex items-center min-w-0">
           <h1 className="text-l font-bold text-gray-800 truncate">
-            The Garage Dunboyne - {activeView === 'today' ? "Today's Bookings" : "Pending Approval"}
+            The Garage - {activeView === 'today' ? "Today's Bookings" : "Pending Approval"}
           </h1>
         </div>
         {/* Center: Date selection/calendar - only show for today's bookings */}

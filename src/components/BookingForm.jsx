@@ -12,6 +12,57 @@ const getFirstDayOfMonth = (year, month) => {
   return new Date(year, month, 1).getDay(); // 0 for Sunday, 1 for Monday, etc.
 };
 
+// Fetch Irish public holidays for the current and next year
+const fetchIrishBankHolidays = async () => {
+  const currentYear = new Date().getFullYear();
+  const nextYear = currentYear + 1;
+  const urls = [
+    `https://date.nager.at/api/v3/PublicHolidays/${currentYear}/IE`,
+    `https://date.nager.at/api/v3/PublicHolidays/${nextYear}/IE`,
+  ];
+
+  // Define the specific names of holidays when the garage is closed.
+  // These strings will be used for a flexible, case-insensitive search.
+  const garageClosedHolidayNames = [
+    "new year's day",
+    "st. patrick's day",
+    'easter monday',
+    'may day',
+    'june holiday',
+    'august holiday',
+    'october holiday',
+    'christmas day',
+    "st. stephen's day",
+  ];
+
+  try {
+    const responses = await Promise.all(urls.map((url) => fetch(url)));
+    const data = (await Promise.all(responses.map((res) => res.json()))).flat();
+
+    console.log("Fetched Irish bank holidays:", data); // Debugging log
+
+    // Filter holidays to include only garage-closed days using a flexible search.
+    const filteredHolidays = data
+      .filter((holiday) => {
+        const holidayNameLower = holiday.name.toLowerCase();
+        const localNameLower = holiday.localName.toLowerCase();
+
+        // Check if the holiday name or local name includes any of the closed holiday names.
+        return garageClosedHolidayNames.some(
+          (closedDay) =>
+            holidayNameLower.includes(closedDay) ||
+            localNameLower.includes(closedDay)
+        );
+      })
+      .map((holiday) => holiday.date); // Extract the dates
+
+    return filteredHolidays;
+  } catch (error) {
+    console.error("Failed to fetch Irish bank holidays:", error);
+    return []; // Fail gracefully by returning an empty array
+  }
+};
+
 // Main Booking Form component
 export default function BookingForm() {
   const [formData, setFormData] = useState({
@@ -39,6 +90,7 @@ export default function BookingForm() {
   });
   const [showCalendar, setShowCalendar] = useState(false); // To toggle calendar visibility
   const [dateSelectionError, setDateSelectionError] = useState(null);
+  const [bankHolidays, setBankHolidays] = useState([]);
 
   // Fetch unavailable dates from API on component mount
   useEffect(() => {
@@ -59,12 +111,39 @@ export default function BookingForm() {
     fetchUnavailableDatesFromAPI();
   }, []);
 
+  useEffect(() => {
+    const loadBankHolidays = async () => {
+      const cachedHolidays = localStorage.getItem('bankHolidays');
+      const cacheTimestamp = localStorage.getItem('bankHolidaysTimestamp');
+      const oneDay = 24 * 60 * 60 * 1000;
+
+      if (cachedHolidays && cacheTimestamp && (Date.now() - cacheTimestamp < oneDay)) {
+        setBankHolidays(JSON.parse(cachedHolidays));
+      } else {
+        const holidays = await fetchIrishBankHolidays();
+        setBankHolidays(holidays);
+        localStorage.setItem('bankHolidays', JSON.stringify(holidays));
+        localStorage.setItem('bankHolidaysTimestamp', Date.now());
+      }
+    };
+
+    loadBankHolidays();
+  }, []);
+
   // Helper to format date to YYYY-MM-DD
   const formatDate = (date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  };
+
+  // Helper to format date to DD/MM/YYYY
+  const formatDateToDisplay = (date) => {
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
   };
 
   // Get today's date (start of the disabled range)
@@ -142,43 +221,53 @@ export default function BookingForm() {
     if (!date) return;
 
     const dateString = formatDate(date);
+    const displayDate = formatDateToDisplay(date);
+
+    // Priority 1: Check if the date is a garage-closed bank holiday.
+    if (bankHolidays.includes(dateString)) {
+      setMessage(`Bank holiday: Garage is closed.`);
+      setMessageType('error');
+      setFormData((prevData) => ({ ...prevData, appointmentDate: '' }));
+      setDateSelectionError(`Bank holiday: Garage is closed.`);
+      return;
+    }
 
     // Check if the date is a weekend (Saturday = 6, Sunday = 0)
     if (date.getDay() === 0 || date.getDay() === 6) {
       setMessage(`Weekends are not available for appointments. Please choose a weekday.`);
       setMessageType('error');
-      setFormData(prevData => ({ ...prevData, appointmentDate: '' }));
+      setFormData((prevData) => ({ ...prevData, appointmentDate: '' }));
       setDateSelectionError(`Weekends are not available for appointments. Please choose a weekday.`);
       return;
     }
 
     // Check if the date is specifically unavailable from API
     if (unavailableDates.includes(dateString)) {
-      setMessage(`Date ${dateString} is unavailable. Please choose another date.`);
+      setMessage(`Date ${displayDate} is unavailable. Please choose another date.`);
       setMessageType('error');
       setFormData(prevData => ({ ...prevData, appointmentDate: '' }));
-      setDateSelectionError(`Date ${dateString} is unavailable. Please choose another date.`);
+      setDateSelectionError(`Date ${displayDate} is unavailable. Please choose another date.`);
     }
     // Check if the date is in the disabled range (today up to two weeks from today)
     else if (date >= todayDate && date <= twoWeeksFromToday) {
-      setMessage(`Appointments cannot be booked within the next two weeks. Please select a date after ${formatDate(twoWeeksFromToday)}.`);
+      setMessage(`Appointments cannot be booked within the next two weeks. Please select a date after ${formatDateToDisplay(twoWeeksFromToday)}.`);
       setMessageType('error');
       setFormData(prevData => ({ ...prevData, appointmentDate: '' }));
-      setDateSelectionError(`Appointments cannot be booked within the next two weeks. Please select a date after ${formatDate(twoWeeksFromToday)}.`);
+      setDateSelectionError(`Appointments cannot be booked within the next two weeks. Please select a date after ${formatDateToDisplay(twoWeeksFromToday)}.`);
     }
     // Check if the date is in the past
     else if (date < todayDate) {
-      setMessage(`You cannot select a past date (${dateString}).`);
+      setMessage(`You cannot select a past date (${displayDate}).`);
       setMessageType('error');
       setFormData(prevData => ({ ...prevData, appointmentDate: '' }));
-      setDateSelectionError(`You cannot select a past date (${dateString}).`);
+      setDateSelectionError(`You cannot select a past date (${displayDate}).`);
     }
     // Check if the date is more than 3 months from today
     else if (date > threeMonthsFromToday) {
-      setMessage(`Bookings cannot be made more than 3 months in advance. Please select a date before ${formatDate(threeMonthsFromToday)}.`);
+      setMessage(`Bookings cannot be made more than 3 months in advance. Please select a date before ${formatDateToDisplay(threeMonthsFromToday)}.`);
       setMessageType('error');
       setFormData(prevData => ({ ...prevData, appointmentDate: '' }));
-      setDateSelectionError(`Bookings cannot be made more than 3 months in advance. Please select a date before ${formatDate(threeMonthsFromToday)}.`);
+      setDateSelectionError(`Bookings cannot be made more than 3 months in advance. Please select a date before ${formatDateToDisplay(threeMonthsFromToday)}.`);
     }
     else {
       setFormData(prevData => ({ ...prevData, appointmentDate: dateString }));
@@ -246,7 +335,7 @@ export default function BookingForm() {
         carNeeds: formData.carNeeds,
       });
 
-      setMessage('Booking submitted successfully! You will receive a confirmation email shortly.');
+      setMessage('Booking submitted successfully! A member of staff will review your request, and you will receive an email within 2-3 business days with the approval for your booking.');
       setMessageType('success');
       
       // Refresh availability data to update calendar after successful booking
@@ -359,6 +448,7 @@ export default function BookingForm() {
   };
 
   const earliestAvailable = getEarliestAvailableDate();
+  const earliestAvailableDisplay = earliestAvailable ? formatDateToDisplay(new Date(earliestAvailable)) : null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans">
@@ -397,10 +487,10 @@ export default function BookingForm() {
               </div>
             )}
 
-            {!fetchingAvailability && earliestAvailable && (
+            {!fetchingAvailability && earliestAvailableDisplay && (
               <div className="mb-6 p-4 bg-green-50 rounded-lg">
                 <p className="text-green-700">
-                  <span className="font-semibold">Next available date:</span> {earliestAvailable}
+                  <span className="font-semibold">Next available date:</span> {earliestAvailableDisplay}
                 </p>
               </div>
             )}
@@ -578,10 +668,12 @@ export default function BookingForm() {
                           const dateString = formatDate(date);
                           const isWeekend = date.getDay() === 0 || date.getDay() === 6;
                           const isUnavailable = unavailableDates.includes(dateString);
+                          const isBankHoliday = bankHolidays.includes(dateString);
                           const isInDisabledRange = date >= todayDate && date <= twoWeeksFromToday;
                           const isPast = date < todayDate;
                           const isTooFarFuture = date > threeMonthsFromToday;
-                          const isDisabled = isWeekend || isUnavailable || isInDisabledRange || isPast || isTooFarFuture;
+                          const isUnavailableFiltered = unavailableDates.includes(dateString) && !bankHolidays.includes(dateString);
+                          const isDisabled = isWeekend || isUnavailableFiltered || isBankHoliday || isInDisabledRange || isPast || isTooFarFuture;
                           const isSelected = formData.appointmentDate === dateString;
                           
                           return (
@@ -599,6 +691,7 @@ export default function BookingForm() {
                                 }
                                 ${isWeekend ? 'bg-red-50' : ''}
                                 ${isUnavailable ? 'bg-red-100' : ''}
+                                ${isBankHoliday ? 'bg-blue-50' : ''}
                                 ${isInDisabledRange ? 'bg-yellow-50' : ''}
                                 ${isTooFarFuture ? 'bg-gray-100' : ''}
                               `}
@@ -612,6 +705,7 @@ export default function BookingForm() {
                       <div className="mt-4 text-xs text-gray-600 space-y-1">
                         <p><span className="inline-block w-3 h-3 bg-red-50 border rounded mr-2"></span>Weekends unavailable</p>
                         <p><span className="inline-block w-3 h-3 bg-red-100 border rounded mr-2"></span>Fully booked</p>
+                        <p><span className="inline-block w-3 h-3 bg-blue-50 border rounded mr-2"></span>Bank holidays</p>
                         <p><span className="inline-block w-3 h-3 bg-yellow-50 border rounded mr-2"></span>Too soon (2 week minimum)</p>
                         <p><span className="inline-block w-3 h-3 bg-gray-100 border rounded mr-2"></span>Too far (3 month maximum)</p>
                       </div>
