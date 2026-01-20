@@ -69,8 +69,10 @@ const Dashboard = ({ onSignOut }) => {
   const [pendingStatusChange, setPendingStatusChange] = useState(null); // { booking, status } or null
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false); // For table loading state
   const [activeView, setActiveView] = useState('today'); // 'today' or 'pending'
-  const [sideNavOpen, setSideNavOpen] = useState(false); // For mobile menu toggle 
+  // Side nav is permanently collapsed now (no toggle)
+  const sideNavOpen = false;
   const [authReady, setAuthReady] = useState(false); // Track if Firebase auth is ready
+  const [showPendingReminderModal, setShowPendingReminderModal] = useState(false);
 
   // Effect to wait for Firebase auth to be ready
   useEffect(() => {
@@ -102,6 +104,17 @@ const Dashboard = ({ onSignOut }) => {
 
     fetchInitialBookings();
   }, [authReady]); // Run when authReady changes
+
+  // Auto-reload the page every 2 hours
+  useEffect(() => {
+    if (!authReady) return;
+
+    const intervalId = setInterval(() => {
+      window.location.reload();
+    }, 2 * 60 * 60 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [authReady]);
 
   // Use useMemo to filter bookings based on activeView and currentDate from allRawBookings
   const bookings = useMemo(() => {
@@ -139,6 +152,31 @@ const Dashboard = ({ onSignOut }) => {
       // Add any other fields your BookingTable/Modal might expect
     }));
   }, [allRawBookings, currentDate, activeView]); // Re-calculate when allRawBookings, currentDate, or activeView changes
+
+  // Summary stats for the currently selected day (used in header under the date)
+  const daySummary = useMemo(() => {
+    const dateString = formatDate(currentDate);
+    const dayBookings = allRawBookings.filter(b => b.appointment_date === dateString);
+
+    const byStatus = dayBookings.reduce(
+      (acc, b) => {
+        const s = (b.status || '').toLowerCase();
+        if (s === 'approved') acc.approved += 1;
+        else if (s === 'pending') acc.pending += 1;
+        else if (s === 'completed') acc.completed += 1;
+        else if (s === 'declined') acc.declined += 1;
+        else acc.other += 1;
+        return acc;
+      },
+      { approved: 0, pending: 0, completed: 0, declined: 0, other: 0 }
+    );
+
+    const booked = dayBookings.length;
+    const totalSlots = 10;
+    const available = Math.max(0, totalSlots - booked);
+
+    return { booked, available, totalSlots, ...byStatus };
+  }, [allRawBookings, currentDate]);
 
   const handleViewBooking = (booking) => setSelectedBooking(booking);
   const handleCloseModal = () => setSelectedBooking(null);
@@ -288,54 +326,109 @@ const Dashboard = ({ onSignOut }) => {
     return threeMonthsAheadDate;
   }, []);
 
+  const pendingCount = useMemo(() => {
+    return allRawBookings.filter(booking => booking.status && booking.status.toLowerCase() === 'pending').length;
+  }, [allRawBookings]);
+
+  // Alert every 30 minutes if there are pending bookings to review
+  useEffect(() => {
+    if (!authReady) return;
+
+    const remind = () => {
+      if (pendingCount > 0) {
+        setShowPendingReminderModal(true);
+      }
+    };
+
+    // Also run once after a refresh / initial load
+    remind();
+
+    const intervalId = setInterval(remind, 30 * 60 * 1000);
+    return () => clearInterval(intervalId);
+  }, [authReady, pendingCount]);
+
   return (
     <div className="min-h-screen bg-gray-100 flex">
+      {/* Pending Bookings Reminder Modal */}
+      {showPendingReminderModal && pendingCount > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white w-full max-w-md rounded-xl shadow-xl p-6">
+            <h2 className="text-xl font-bold text-gray-900">Pending bookings need review</h2>
+            <p className="mt-2 text-sm text-gray-700">
+              You currently have <span className="font-semibold">{pendingCount}</span> pending booking{pendingCount === 1 ? '' : 's'} waiting for approval.
+            </p>
+            <p className="mt-2 text-sm text-gray-700">Please open <span className="font-semibold">Pending Approval</span> and review them.</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setShowPendingReminderModal(false)}
+                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Side Navigation */}
-      <div className={`bg-white shadow-lg transition-all duration-300 ease-in-out ${sideNavOpen ? 'w-64' : 'w-18'} flex-shrink-0`}>
-        <div className="p-4">
-          {/* Menu Toggle Button */}
-          <button
-            onClick={() => setSideNavOpen(!sideNavOpen)}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors mb-4"
-            aria-label="Toggle Menu"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          
+      <div className={`bg-white shadow-lg transition-all duration-300 ease-in-out ${sideNavOpen ? 'w-64' : 'w-18'} flex-shrink-0 relative`}>
+        <div className="p-4 pt-6">
+          {/* Menu Toggle Button removed */}
+
           {/* Navigation Menu */}
-          <nav className="space-y-2">
+          <nav className="flex-1 p-3 space-y-2">
+            {/* Today's Bookings Button */}
             <button
               onClick={() => {
                 setActiveView('today');
-                // Set current date to today when Today's Bookings is clicked
                 const today = new Date();
                 setCurrentDate(today);
-                // Also set calendar month/year to current month/year
                 setCalendarMonth(today.getMonth());
                 setCalendarYear(today.getFullYear());
               }}
-              className={`w-full flex items-center p-3 rounded-lg transition-colors ${
+              className={`w-full flex items-center p-3 rounded-lg transition-colors relative group justify-center ${
                 activeView === 'today' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
               }`}
+              aria-label="Open Today's Bookings"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              {sideNavOpen && <span className="ml-3 font-medium">Today's Bookings</span>}
+              <div className="relative flex items-center justify-center h-6 w-6 flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+
+              {/* Always-on hover tooltip */}
+              <div className="absolute left-full ml-3 px-3 py-2 bg-gray-900 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 shadow-lg">
+                <div className="font-semibold">All bookings</div>
+                <div className="text-gray-200">Opens bookings for the selected day</div>
+              </div>
             </button>
-            
+
+            {/* Pending Approval Button with Persistent Bubble */}
             <button
               onClick={() => setActiveView('pending')}
-              className={`w-full flex items-center p-3 rounded-lg transition-colors ${
+              className={`w-full flex items-center p-3 rounded-lg transition-colors relative group justify-center ${
                 activeView === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'text-gray-600 hover:bg-gray-100'
               }`}
+              aria-label="Open Pending Approval"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {sideNavOpen && <span className="ml-3 font-medium">Pending Approval</span>}
+              <div className="relative flex items-center justify-center h-6 w-6 flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+
+                {pendingCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-white shadow-sm">
+                    {pendingCount > 9 ? '9+' : pendingCount}
+                  </span>
+                )}
+              </div>
+
+              {/* Always-on hover tooltip */}
+              <div className="absolute left-full ml-3 px-3 py-2 bg-gray-900 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 shadow-lg">
+                <div className="font-semibold">Pending approval</div>
+                <div className="text-gray-200">Opens bookings waiting for approval</div>
+              </div>
             </button>
           </nav>
         </div>
@@ -350,112 +443,11 @@ const Dashboard = ({ onSignOut }) => {
             The Garage - {activeView === 'today' ? "Today's Bookings" : "Pending Approval"}
           </h1>
         </div>
+
         {/* Center: Date selection/calendar - only show for today's bookings */}
-        {activeView === 'today' && (
-        <div className="flex-1 flex justify-center min-w-0">
-          <div className="flex items-center space-x-2 relative">
-            <button
-              onClick={handlePrevDay}
-              className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors"
-              aria-label="Previous Day"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-700" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd"/>
-              </svg>
-            </button>
-            <div
-              className="text-lg font-semibold text-gray-700 min-w-[200px] text-center p-2 rounded-md cursor-pointer hover:bg-gray-100 transition-colors"
-              onClick={() => setShowCalendar(!showCalendar)}
-            >
-              {currentDate.toDateString()}
-            </div>
-            <button
-              onClick={handleNextDay}
-              className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors"
-              aria-label="Next Day"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-700" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-              </svg>
-            </button>
-            {/* Custom Datepicker Calendar (unchanged) */}
-            {showCalendar && (
-              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-20 bg-white border border-gray-300 rounded-lg shadow-xl p-4 w-72 sm:w-80">
-                {fetchingAvailability ? (
-                  <div className="text-center text-gray-600 mb-4">Loading calendar data...</div>
-                ) : availabilityError ? (
-                  <div className="text-center text-red-600 mb-4">{availabilityError}</div>
-                ) : (
-                  <>
-                    <div className="flex justify-between items-center mb-4">
-                      <button type="button" onClick={handlePrevMonth} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd"/>
-                        </svg>
-                      </button>
-                      <span className="text-lg font-semibold text-gray-800">
-                        {monthNames[calendarMonth]} {calendarYear}
-                      </span>
-                      <button type="button" onClick={handleNextMonth} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                        </svg>
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-7 gap-1 text-center text-sm">
-                      {dayNames.map(day => (
-                        <div key={day} className="font-medium text-gray-500">
-                          {day}
-                        </div>
-                      ))}
-                      {calendarDays.map((date, index) => {
-                        const dateString = date ? formatDate(date) : null;
-                        const isSelected = dateString && formatDate(currentDate) === dateString;
+        {/* (moved above table) */}
 
-                        // Disable if more than 3 months ago or more than 3 months ahead
-                        const isTooOld = date && date < threeMonthsAgo;
-                        const isTooFar = date && date > threeMonthsAhead;
-                        const isWeekend = date && (date.getDay() === 0 || date.getDay() === 6); // Sunday=0, Saturday=6
-
-                        let dayClasses = "p-2 rounded-md transition duration-150 ease-in-out";
-                        if (date) {
-                          if (isTooOld || isTooFar || isWeekend) {
-                            dayClasses += " bg-gray-100 text-gray-400 cursor-not-allowed";
-                          } else if (isSelected) {
-                            dayClasses += " bg-indigo-600 text-white font-bold";
-                          } else {
-                            dayClasses += " hover:bg-indigo-100 cursor-pointer";
-                          }
-                        } else {
-                          dayClasses += " invisible"; // For empty cells
-                        }
-
-                        return (
-                          <div
-                            key={index}
-                            className={dayClasses}
-                            onClick={() => !(isTooOld || isTooFar || isWeekend) && handleCalendarDayClick(date)} 
-                          >
-                            {date ? date.getDate() : ''}
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {dateSelectionError && (
-                      <p className="text-red-600 text-sm mt-3 text-center">{dateSelectionError}</p>
-                    )}
-                    <p className="text-xs text-gray-500 mt-3 text-center">
-                      All dates are selectable.
-                    </p>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-        )}
         {/* Right: Buttons */}
-      
         <div className="flex-1 flex justify-end items-center space-x-2 min-w-0">
           <button
             onClick={() => window.open('/booking', '_blank')}
@@ -474,7 +466,153 @@ const Dashboard = ({ onSignOut }) => {
           <button onClick={onSignOut} className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors">Sign Out</button>
         </div>
       </header>
+
       <main className="p-4 flex-grow">
+        {/* Date picker + daily summary container (above table) */}
+        {activeView === 'today' && (
+          <div className="mb-4">
+            <div className="w-full bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handlePrevDay}
+                    className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+                    aria-label="Previous Day"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-700" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd"/>
+                    </svg>
+                  </button>
+
+                  <div className="relative">
+                    <button
+                      type="button"
+                      className="text-base sm:text-lg font-semibold text-gray-800 min-w-[240px] text-center px-4 py-2 rounded-lg cursor-pointer bg-white border border-gray-300 hover:border-gray-400 hover:bg-gray-50 transition-colors shadow-sm"
+                      onClick={() => setShowCalendar(!showCalendar)}
+                      aria-haspopup="dialog"
+                      aria-expanded={showCalendar}
+                      title="Click to pick a date"
+                    >
+                      <span className="inline-flex items-center justify-center gap-2">
+                        {currentDate.toDateString()}
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z" clipRule="evenodd" />
+                        </svg>
+                      </span>
+                    </button>
+
+                    {/* Calendar popover */}
+                    {showCalendar && (
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-20 bg-white border border-gray-300 rounded-lg shadow-xl p-4 w-72 sm:w-80">
+                        {fetchingAvailability ? (
+                          <div className="text-center text-gray-600 mb-4">Loading calendar data...</div>
+                        ) : availabilityError ? (
+                          <div className="text-center text-red-600 mb-4">{availabilityError}</div>
+                        ) : (
+                          <>
+                            <div className="flex justify-between items-center mb-4">
+                              <button type="button" onClick={handlePrevMonth} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd"/>
+                                </svg>
+                              </button>
+                              <span className="text-lg font-semibold text-gray-800">
+                                {monthNames[calendarMonth]} {calendarYear}
+                              </span>
+                              <button type="button" onClick={handleNextMonth} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                </svg>
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-7 gap-1 text-center text-sm">
+                              {dayNames.map(day => (
+                                <div key={day} className="font-medium text-gray-500">
+                                  {day}
+                                </div>
+                              ))}
+                              {calendarDays.map((date, index) => {
+                                const dateString = date ? formatDate(date) : null;
+                                const isSelected = dateString && formatDate(currentDate) === dateString;
+
+                                const isTooOld = date && date < threeMonthsAgo;
+                                const isTooFar = date && date > threeMonthsAhead;
+                                const isWeekend = date && (date.getDay() === 0 || date.getDay() === 6);
+
+                                let dayClasses = "p-2 rounded-md transition duration-150 ease-in-out";
+                                if (date) {
+                                  if (isTooOld || isTooFar || isWeekend) {
+                                    dayClasses += " bg-gray-100 text-gray-400 cursor-not-allowed";
+                                  } else if (isSelected) {
+                                    dayClasses += " bg-indigo-600 text-white font-bold";
+                                  } else {
+                                    dayClasses += " hover:bg-indigo-100 cursor-pointer";
+                                  }
+                                } else {
+                                  dayClasses += " invisible";
+                                }
+
+                                return (
+                                  <div
+                                    key={index}
+                                    className={dayClasses}
+                                    onClick={() => !(isTooOld || isTooFar || isWeekend) && handleCalendarDayClick(date)}
+                                  >
+                                    {date ? date.getDate() : ''}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {dateSelectionError && (
+                              <p className="text-red-600 text-sm mt-3 text-center">{dateSelectionError}</p>
+                            )}
+                            <p className="text-xs text-gray-500 mt-3 text-center">All dates are selectable.</p>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={handleNextDay}
+                    className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+                    aria-label="Next Day"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-700" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="flex flex-col sm:items-end">
+                  <div className="text-sm text-gray-600">
+                    <span className="font-semibold text-gray-900">{daySummary.available}</span> of {daySummary.totalSlots} slots available
+                    <span className="text-gray-500"> ({daySummary.booked} booked)</span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-2.5 w-2.5 rounded-full bg-blue-600" aria-hidden="true" />
+                      Approved {daySummary.approved}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" aria-hidden="true" />
+                      Pending {daySummary.pending}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-2.5 w-2.5 rounded-full bg-green-600" aria-hidden="true" />
+                      Completed {daySummary.completed}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-2.5 w-2.5 rounded-full bg-red-500" aria-hidden="true" />
+                      Declined {daySummary.declined}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <BookingTable bookings={bookings} handleViewBooking={handleViewBooking} isUpdatingStatus={isUpdatingStatus} />
       </main>
       {selectedBooking && (
