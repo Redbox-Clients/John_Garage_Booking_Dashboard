@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchAvailability, createBooking } from '../api';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '../firebase';
 
 // Helper function to get days in a month
 const getDaysInMonth = (year, month) => {
@@ -65,6 +67,16 @@ const fetchIrishBankHolidays = async () => {
 
 // Main Booking Form component
 export default function BookingForm() {
+  // Detect if an admin user is signed in (firebase auth user present)
+  const [isAdminBooking, setIsAdminBooking] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsAdminBooking(!!user);
+    });
+    return () => unsubscribe();
+  }, []);
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -249,7 +261,7 @@ export default function BookingForm() {
       setDateSelectionError(`Date ${displayDate} is unavailable. Please choose another date.`);
     }
     // Check if the date is in the disabled range (today up to two weeks from today)
-    else if (date >= todayDate && date <= twoWeeksFromToday) {
+    else if (!isAdminBooking && date >= todayDate && date <= twoWeeksFromToday) {
       setMessage(`Appointments cannot be booked within the next two weeks. Please select a date after ${formatDateToDisplay(twoWeeksFromToday)}.`);
       setMessageType('error');
       setFormData(prevData => ({ ...prevData, appointmentDate: '' }));
@@ -417,8 +429,8 @@ export default function BookingForm() {
 
   // Get earliest available date for display
   const getEarliestAvailableDate = () => {
-    const startDate = new Date(twoWeeksFromToday);
-    startDate.setDate(startDate.getDate() + 1); // Start from the day after two weeks
+    const startDate = new Date(isAdminBooking ? todayDate : twoWeeksFromToday);
+    startDate.setDate(startDate.getDate() + 1); // Start from the day after the minimum lead time
 
     // Calculate the maximum number of days to check (from start date to 3 months limit)
     const maxCheckDate = new Date(threeMonthsFromToday);
@@ -428,17 +440,17 @@ export default function BookingForm() {
     for (let i = 0; i < maxDaysToCheck; i++) {
       const checkDate = new Date(startDate);
       checkDate.setDate(startDate.getDate() + i);
-      
+
       // Stop if we've exceeded the 3-month limit
       if (checkDate > threeMonthsFromToday) {
         break;
       }
-      
+
       // Skip weekends
       if (checkDate.getDay() === 0 || checkDate.getDay() === 6) {
         continue;
       }
-      
+
       const dateString = formatDate(checkDate);
       if (!unavailableDates.includes(dateString)) {
         return dateString;
@@ -458,7 +470,9 @@ export default function BookingForm() {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <img src="/carlogo.jpg" alt="The Garage Dunboyne" className="h-12 w-12 rounded-full" />
-              <h1 className="text-2xl font-bold text-gray-900">Book Your Appointment</h1>
+              <h1 className="text-2xl font-bold text-gray-900">
+                {isAdminBooking ? 'Admin Booking Form' : 'Book Your Appointment'}
+              </h1>
             </div>
             <Link
               to="/cancel-booking"
@@ -669,7 +683,7 @@ export default function BookingForm() {
                           const isWeekend = date.getDay() === 0 || date.getDay() === 6;
                           const isUnavailable = unavailableDates.includes(dateString);
                           const isBankHoliday = bankHolidays.includes(dateString);
-                          const isInDisabledRange = date >= todayDate && date <= twoWeeksFromToday;
+                          const isInDisabledRange = !isAdminBooking && date >= todayDate && date <= twoWeeksFromToday;
                           const isPast = date < todayDate;
                           const isTooFarFuture = date > threeMonthsFromToday;
                           const isUnavailableFiltered = unavailableDates.includes(dateString) && !bankHolidays.includes(dateString);
@@ -706,7 +720,9 @@ export default function BookingForm() {
                         <p><span className="inline-block w-3 h-3 bg-red-50 border rounded mr-2"></span>Weekends unavailable</p>
                         <p><span className="inline-block w-3 h-3 bg-red-100 border rounded mr-2"></span>Fully booked</p>
                         <p><span className="inline-block w-3 h-3 bg-blue-50 border rounded mr-2"></span>Bank holidays</p>
-                        <p><span className="inline-block w-3 h-3 bg-yellow-50 border rounded mr-2"></span>Too soon (2 week minimum)</p>
+                        {!isAdminBooking && (
+                          <p><span className="inline-block w-3 h-3 bg-yellow-50 border rounded mr-2"></span>Too soon (2 week minimum)</p>
+                        )}
                         <p><span className="inline-block w-3 h-3 bg-gray-100 border rounded mr-2"></span>Too far (3 month maximum)</p>
                       </div>
                     </div>
