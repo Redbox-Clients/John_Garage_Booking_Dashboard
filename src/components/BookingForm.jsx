@@ -307,7 +307,7 @@ export default function BookingForm() {
     }
 
     // Check if all required fields are filled
-    const requiredFields = ['name', 'email', 'phoneNumber', 'carReg', 'appointmentDate'];
+    const requiredFields = ['name', 'email', 'phoneNumber', 'carReg', 'appointmentDate', 'carNeeds'];
     const missingFields = requiredFields.filter(field => !formData[field].trim());
 
     if (missingFields.length > 0) {
@@ -741,6 +741,7 @@ export default function BookingForm() {
                   value={formData.carNeeds}
                   onChange={handleChange}
                   rows={4}
+                  required
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors resize-none"
                   placeholder="Please describe what service your car needs (e.g., NCT, service, repair issue, etc.)"
                 />

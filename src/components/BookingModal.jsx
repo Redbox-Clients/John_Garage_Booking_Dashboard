@@ -1,9 +1,142 @@
 // src/components/BookingModal.jsx
 import React from 'react';
 
+function formatDateGB(value) {
+  if (!value) return 'N/A';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleDateString('en-GB');
+}
+
+function escapeHtml(unsafe) {
+  return String(unsafe ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 const BookingModal = ({ booking, onClose, onStatusChange, isUpdatingStatus, updateStatusError, handleStatusChangeRequest }) => {
   // If no booking object is provided, render nothing
-  if (!booking) return null; 
+  if (!booking) return null;
+
+  const handleDownloadPdf = () => {
+    const carDetails = `${booking.make || ''} ${booking.model || ''} (${booking.reg || ''})`.trim();
+
+    // Print-friendly HTML. Users choose "Save as PDF" in the print dialog.
+    const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Booking ${escapeHtml(booking.id)}</title>
+    <style>
+      :root { --text:#111827; --muted:#6b7280; --border:#e5e7eb; }
+      * { box-sizing:border-box; }
+      body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif; color:var(--text); margin:0; padding:24px; }
+      .wrap { max-width:760px; margin:0 auto; }
+      header { display:flex; align-items:baseline; justify-content:space-between; gap:16px; padding-bottom:12px; border-bottom:1px solid var(--border); margin-bottom:16px; }
+      h1 { font-size:20px; margin:0; }
+      .meta { color:var(--muted); font-size:12px; }
+      .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px 24px; }
+      .row { padding:10px 12px; border:1px solid var(--border); border-radius:10px; }
+      .label { color:var(--muted); font-size:12px; margin-bottom:4px; }
+      .value { font-size:14px; white-space:pre-wrap; word-break:break-word; }
+      .full { grid-column:1 / -1; }
+      @page { margin: 12mm; }
+      @media print { body { padding:0; } .row { break-inside:avoid; } }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div>
+          <h1>Booking Details</h1>
+          <div class="meta">Generated: ${escapeHtml(new Date().toLocaleString('en-GB'))}</div>
+        </div>
+        <div class="meta">Booking ID: ${escapeHtml(booking.id)}</div>
+      </header>
+
+      <section class="grid">
+        <div class="row">
+          <div class="label">Appointment Date</div>
+          <div class="value">${escapeHtml(formatDateGB(booking.date))}</div>
+        </div>
+        <div class="row">
+          <div class="label">Status</div>
+          <div class="value">${escapeHtml(booking.status)}</div>
+        </div>
+
+        <div class="row">
+          <div class="label">Customer Name</div>
+          <div class="value">${escapeHtml(booking.name)}</div>
+        </div>
+        <div class="row">
+          <div class="label">Phone</div>
+          <div class="value">${escapeHtml(booking.phone)}</div>
+        </div>
+
+        <div class="row full">
+          <div class="label">Email</div>
+          <div class="value">${escapeHtml(booking.email)}</div>
+        </div>
+
+        <div class="row full">
+          <div class="label">Car Details</div>
+          <div class="value">${escapeHtml(carDetails)}</div>
+        </div>
+
+        <div class="row full">
+          <div class="label">Service Required</div>
+          <div class="value">${escapeHtml(booking.details)}</div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      window.onload = () => {
+        window.focus();
+        window.print();
+      };
+    </script>
+  </body>
+</html>`;
+
+    // Prefer hidden iframe so we can print without popups.
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      alert('Unable to open print preview. Please try a different browser.');
+      document.body.removeChild(iframe);
+      return;
+    }
+
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    // Cleanup after a short delay (print dialog is user-driven)
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } finally {
+        setTimeout(() => {
+          try { document.body.removeChild(iframe); } catch { /* ignore */ }
+        }, 1000);
+      }
+    }, 250);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 animate-fade-in">
@@ -17,7 +150,7 @@ const BookingModal = ({ booking, onClose, onStatusChange, isUpdatingStatus, upda
 
         <div className="space-y-4 text-gray-700">
           <p><span className="font-semibold">Booking ID:</span> {booking.id}</p>
-          <p><span className="font-semibold">Booking Date:</span> {booking.date ? new Date(booking.date).toLocaleDateString('en-GB') : 'N/A'}</p>
+          <p><span className="font-semibold">Booking Date:</span> {formatDateGB(booking.date)}</p>
           <p><span className="font-semibold">Customer Name:</span> {booking.name}</p>
           <p><span className="font-semibold">Email:</span> {booking.email}</p>
           <p><span className="font-semibold">Phone:</span> {booking.phone}</p>
@@ -53,7 +186,7 @@ const BookingModal = ({ booking, onClose, onStatusChange, isUpdatingStatus, upda
                   Pending
                 </button>
               )}
-              
+
               {/* Approved Button */}
               {!(booking.status && ((booking.status.toLowerCase() === 'declined') || (booking.status.toLowerCase() === 'completed') || (booking.status.toLowerCase() === 'approved'))) && (
                 <button
@@ -63,7 +196,7 @@ const BookingModal = ({ booking, onClose, onStatusChange, isUpdatingStatus, upda
                   Approve
                 </button>
               )}
-              
+
               {/* Completed Button */}
               {!(booking.status && ((booking.status.toLowerCase() === 'declined') || (booking.status.toLowerCase() === 'completed'))) && (
                 <button
@@ -73,7 +206,7 @@ const BookingModal = ({ booking, onClose, onStatusChange, isUpdatingStatus, upda
                   Complete
                 </button>
               )}
-              
+
               {/* Declined Button */}
               {!(booking.status && ((booking.status.toLowerCase() === 'declined') || (booking.status.toLowerCase() === 'completed'))) && (
                 <button
@@ -90,6 +223,13 @@ const BookingModal = ({ booking, onClose, onStatusChange, isUpdatingStatus, upda
           {updateStatusError && <p className="text-red-500">{updateStatusError}</p>}
 
           <div className="mt-6 flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              className="px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            >
+              Download PDF
+            </button>
             <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Close</button>
           </div>
         </div>

@@ -31,9 +31,20 @@ const BookingTable = ({ bookings, handleViewBooking, isUpdatingStatus }) => {
             </tr>
           ) : safeBookings.length > 0 ? (
             safeBookings.map((booking) => (
-              <tr key={booking.id} className="hover:bg-gray-50 transition-colors duration-150">
-                {/* Displaying first 8 characters of ID for brevity */}
-                
+              <tr
+                key={booking.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleViewBooking(booking)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleViewBooking(booking);
+                  }
+                }}
+                className="cursor-pointer hover:bg-gray-50 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                aria-label={`View booking ${booking.id}`}
+              >
                 <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-700">{booking.name}</td>
                 <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-700">{booking.email}</td>
                 <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-700">{booking.phone}</td>
@@ -60,7 +71,10 @@ const BookingTable = ({ bookings, handleViewBooking, isUpdatingStatus }) => {
                 {/* Actions column */}
                 <td className="px-6 py-2 whitespace-nowrap text-sm font-medium">
                   <button
-                    onClick={() => handleViewBooking(booking)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleViewBooking(booking);
+                    }}
                     className="text-blue-600 hover:text-blue-900 bg-blue-50 px-3 py-1 rounded-md hover:bg-blue-100 transition-colors duration-150"
                   >
                     View

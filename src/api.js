@@ -36,7 +36,9 @@ export const fetchAvailability = async () => {
 
 export const createBooking = async (bookingData) => {
   try {
-    const { data } = await axios.post(`${API_BASE}/api/bookings`, bookingData);
+    // If a user is signed in, include the ID token so the backend can apply the 2-week override.
+    const headers = await getAuthHeader();
+    const { data } = await axios.post(`${API_BASE}/api/bookings`, bookingData, { headers });
     return data;
   } catch (error) {
     console.error('Error creating booking:', error);
@@ -46,7 +48,9 @@ export const createBooking = async (bookingData) => {
 
 export const cancelBooking = async (bookingId) => {
   try {
-    const { data } = await axios.post(`${API_BASE}/api/bookings/cancel`, { bookingId });
+    // Optional: include auth when available.
+    const headers = await getAuthHeader();
+    const { data } = await axios.post(`${API_BASE}/api/bookings/cancel`, { bookingId }, { headers });
     return data;
   } catch (error) {
     console.error('Error cancelling booking:', error);
