@@ -25,6 +25,7 @@ const BookingModal = ({ booking, onClose, onStatusChange, isUpdatingStatus, upda
     const carDetails = `${booking.make || ''} ${booking.model || ''} (${booking.reg || ''})`.trim();
 
     // Print-friendly HTML. Users choose "Save as PDF" in the print dialog.
+    // Important: don't auto-print inside the HTML itself, or we can trigger the dialog twice.
     const html = `<!doctype html>
 <html>
   <head>
@@ -93,13 +94,6 @@ const BookingModal = ({ booking, onClose, onStatusChange, isUpdatingStatus, upda
         </div>
       </section>
     </div>
-
-    <script>
-      window.onload = () => {
-        window.focus();
-        window.print();
-      };
-    </script>
   </body>
 </html>`;
 
@@ -112,30 +106,54 @@ const BookingModal = ({ booking, onClose, onStatusChange, isUpdatingStatus, upda
     iframe.style.height = '0';
     iframe.style.border = '0';
     iframe.setAttribute('aria-hidden', 'true');
+
+    // Ensure same-origin about:blank iframe document exists before writing.
+    iframe.src = 'about:blank';
+
+    const cleanup = () => {
+      try { document.body.removeChild(iframe); } catch { /* ignore */ }
+    };
+
     document.body.appendChild(iframe);
 
     const doc = iframe.contentWindow?.document;
     if (!doc) {
       alert('Unable to open print preview. Please try a different browser.');
-      document.body.removeChild(iframe);
+      cleanup();
       return;
     }
 
+    // Write the HTML
     doc.open();
     doc.write(html);
     doc.close();
 
-    // Cleanup after a short delay (print dialog is user-driven)
-    setTimeout(() => {
+    // Wait until the iframe doc is ready + fonts/layout applied, otherwise some browsers print blank.
+    const w = iframe.contentWindow;
+    if (!w) {
+      cleanup();
+      return;
+    }
+
+    const doPrint = () => {
       try {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-      } finally {
-        setTimeout(() => {
-          try { document.body.removeChild(iframe); } catch { /* ignore */ }
-        }, 1000);
+        w.onafterprint = cleanup;
+        w.focus();
+        w.print();
+        setTimeout(cleanup, 3000);
+      } catch {
+        cleanup();
       }
-    }, 250);
+    };
+
+    const readyState = w.document?.readyState;
+    if (readyState === 'complete') {
+      // Give it a tick to paint.
+      setTimeout(doPrint, 250);
+    } else {
+      // Print once the iframe window fires load.
+      iframe.onload = () => setTimeout(doPrint, 250);
+    }
   };
 
   return (
